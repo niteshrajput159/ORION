@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orion — Intelligent OS Behavior & Recovery</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #0b0f19; color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .glass-card { background: rgba(17, 24, 39, 0.75); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .badge-critical { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .badge-high { background: rgba(249, 115, 22, 0.2); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.4); }
+    .badge-medium { background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
+    .badge-low { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .badge-success { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
+    .badge-escalated { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="glass-card sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between border-b border-gray-800">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">OR</div>
+      <div>
+        <h1 class="font-bold text-lg leading-tight tracking-wide flex items-center gap-2">
+          Orion
+          <span class="text-xs font-normal px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">Core v1.0</span>
+        </h1>
+        <p class="text-xs text-gray-400">Intelligent OS Behavior & Recovery Platform</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-2 text-xs text-gray-300 bg-gray-900 px-3 py-1.5 rounded-full border border-gray-800">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="daemon-status">Daemon Connected</span>
+      </div>
+      <a href="/docs" target="_blank" class="text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg border border-gray-700 transition">
+        REST API Docs &rarr;
+      </a>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="bg-gray-950/70 border-b border-gray-800/80 px-6 flex space-x-1 overflow-x-auto text-sm font-medium">
+    <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn px-4 py-3 border-b-2 border-indigo-500 text-indigo-400">Dashboard</button>
+    <button onclick="switchTab('processes')" id="tab-processes" class="tab-btn px-4 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Processes</button>
+    <button onclick="switchTab('incidents')" id="tab-incidents" class="tab-btn px-4 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Incidents</button>
+    <button onclick="switchTab('recovery')" id="tab-recovery" class="tab-btn px-4 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Recovery</button>
+    <button onclick="switchTab('deadlocks')" id="tab-deadlocks" class="tab-btn px-4 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Deadlocks (WFG)</button>
+    <button onclick="switchTab('workloads')" id="tab-workloads" class="tab-btn px-4 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Workload Controls</button>
+    <button onclick="switchTab('policies')" id="tab-policies" class="tab-btn px-4 py-3 border-b-2 border-transparent text-gray-400 hover:text-gray-200">Policies</button>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+
+    <!-- TAB 1: DASHBOARD -->
+    <section id="panel-dashboard" class="tab-panel space-y-6">
+      <!-- Metric Cards Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="glass-card p-4 rounded-xl">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">System Health</p>
+          <p id="stat-health" class="text-xl font-bold mt-1 text-emerald-400">HEALTHY</p>
+        </div>
+        <div class="glass-card p-4 rounded-xl">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">CPU Usage</p>
+          <p id="stat-cpu" class="text-xl font-bold mt-1 text-indigo-400">0.0%</p>
+        </div>
+        <div class="glass-card p-4 rounded-xl">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Memory Usage</p>
+          <p id="stat-mem" class="text-xl font-bold mt-1 text-sky-400">0.0%</p>
+        </div>
+        <div class="glass-card p-4 rounded-xl">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Active Processes</p>
+          <p id="stat-procs" class="text-xl font-bold mt-1 text-gray-200">0</p>
+        </div>
+        <div class="glass-card p-4 rounded-xl">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Active Incidents</p>
+          <p id="stat-incidents" class="text-xl font-bold mt-1 text-amber-400">0</p>
+        </div>
+        <div class="glass-card p-4 rounded-xl">
+          <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Recovery Success</p>
+          <p id="stat-recovery" class="text-xl font-bold mt-1 text-emerald-400">100.0%</p>
+        </div>
+      </div>
+
+      <!-- Live Resource Timeline -->
+      <div class="glass-card p-5 rounded-xl space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-sm uppercase tracking-wider text-gray-300">Live Telemetry (Real-time Observation Loop)</h2>
+          <span class="text-xs text-gray-500">Auto-refresh: 2.0s</span>
+        </div>
+        <div class="h-44 w-full bg-gray-950/50 rounded-lg p-2 border border-gray-800/80 flex items-end space-x-1" id="chart-bars">
+          <!-- Dynamic bars will be rendered here -->
+        </div>
+        <div class="flex items-center justify-between text-xs text-gray-400 px-1">
+          <span>&larr; Past Cycles</span>
+          <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-indigo-500 inline-block"></span> CPU %</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-sky-500 inline-block"></span> Memory %</span>
+          </div>
+          <span>Current &rarr;</span>
+        </div>
+      </div>
+
+      <!-- Recent Incidents & Recoveries Preview -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass-card p-5 rounded-xl space-y-3">
+          <h2 class="font-semibold text-sm uppercase tracking-wider text-gray-300 flex items-center justify-between">
+            Recent Incidents
+            <button onclick="switchTab('incidents')" class="text-xs text-indigo-400 hover:underline">View All</button>
+          </h2>
+          <div id="dashboard-incidents-list" class="space-y-2 text-xs">
+            <p class="text-gray-500 italic">No active incidents detected.</p>
+          </div>
+        </div>
+
+        <div class="glass-card p-5 rounded-xl space-y-3">
+          <h2 class="font-semibold text-sm uppercase tracking-wider text-gray-300 flex items-center justify-between">
+            Recovery History
+            <button onclick="switchTab('recovery')" class="text-xs text-indigo-400 hover:underline">View All</button>
+          </h2>
+          <div id="dashboard-recovery-list" class="space-y-2 text-xs">
+            <p class="text-gray-500 italic">No automated recoveries logged yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: PROCESSES -->
+    <section id="panel-processes" class="tab-panel hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-bold text-base">Operating System Processes</h2>
+        <input type="text" id="proc-search" oninput="renderProcesses()" placeholder="Filter by name or PID..." class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500">
+      </div>
+      <div class="glass-card rounded-xl overflow-hidden border border-gray-800">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-gray-300">
+            <thead class="bg-gray-900/80 text-gray-400 uppercase font-semibold border-b border-gray-800">
+              <tr>
+                <th class="p-3">PID</th>
+                <th class="p-3">Process Name</th>
+                <th class="p-3">User</th>
+                <th class="p-3">State</th>
+                <th class="p-3">CPU %</th>
+                <th class="p-3">Memory (RSS)</th>
+                <th class="p-3">Threads</th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="processes-table-body" class="divide-y divide-gray-800/60">
+              <tr><td colspan="8" class="p-4 text-center text-gray-500">Loading process snapshot...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: INCIDENTS -->
+    <section id="panel-incidents" class="tab-panel hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-base">Detected OS Incidents & Anomaly Log</h2>
+          <p class="text-xs text-gray-400">Automated fault detection, policy routing, and closed-loop OS remediation</p>
+        </div>
+        <button onclick="resolveAllIncidents()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition shadow-lg shadow-emerald-600/30 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+          Resolve All Open Incidents
+        </button>
+      </div>
+      <div class="glass-card rounded-xl overflow-hidden border border-gray-800">
+        <table class="w-full text-left text-xs text-gray-300">
+          <thead class="bg-gray-900/80 text-gray-400 uppercase font-semibold border-b border-gray-800">
+            <tr>
+              <th class="p-3">ID</th>
+              <th class="p-3">Process</th>
+              <th class="p-3">Incident Type</th>
+              <th class="p-3">Severity</th>
+              <th class="p-3">Status</th>
+              <th class="p-3">Detected At</th>
+              <th class="p-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="incidents-table-body" class="divide-y divide-gray-800/60">
+            <tr><td colspan="7" class="p-4 text-center text-gray-500">No incidents recorded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 4: RECOVERY -->
+    <section id="panel-recovery" class="tab-panel hidden space-y-4">
+      <h2 class="font-bold text-base">Automated Remediation & Verification History</h2>
+      <div class="glass-card rounded-xl overflow-hidden border border-gray-800">
+        <table class="w-full text-left text-xs text-gray-300">
+          <thead class="bg-gray-900/80 text-gray-400 uppercase font-semibold border-b border-gray-800">
+            <tr>
+              <th class="p-3">Recovery ID</th>
+              <th class="p-3">Incident ID</th>
+              <th class="p-3">Action Dispatched</th>
+              <th class="p-3">Attempt</th>
+              <th class="p-3">Verification Result</th>
+              <th class="p-3">Outcome</th>
+            </tr>
+          </thead>
+          <tbody id="recovery-table-body" class="divide-y divide-gray-800/60">
+            <tr><td colspan="6" class="p-4 text-center text-gray-500">No recovery operations recorded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 5: DEADLOCKS -->
+    <section id="panel-deadlocks" class="tab-panel hidden space-y-5">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-base">Wait-For Graph (WFG) & Deadlock Cycle Elimination</h2>
+          <p class="text-xs text-gray-400">3-Color Depth First Search (DFS) Cycle Finder with Least-Cost Victim Selection</p>
+        </div>
+        <div class="flex items-center space-x-2.5">
+          <button onclick="launchWorkload('deadlock_test')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
+            Trigger Deadlock Workload
+          </button>
+          <button onclick="resolveDeadlocks()" class="bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition shadow-lg shadow-rose-600/30 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            Resolve Active Deadlocks
+          </button>
+        </div>
+      </div>
+
+      <!-- State Status Banner -->
+      <div id="deadlock-status-text">
+        <p class="text-xs text-gray-400 italic">Evaluating thread lock acquisition graphs...</p>
+      </div>
+
+      <!-- 6-Metric Cards Required by Architecture Specification -->
+      <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <div class="glass-card p-3 rounded-lg border border-gray-800">
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block">Cycle Detected</span>
+          <span id="dl-card-cycle" class="text-xs font-mono font-bold text-gray-200 mt-1 block">None</span>
+        </div>
+        <div class="glass-card p-3 rounded-lg border border-gray-800">
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block">Victim Selected</span>
+          <span id="dl-card-victim" class="text-xs font-mono font-bold text-rose-400 mt-1 block">None</span>
+        </div>
+        <div class="glass-card p-3 rounded-lg border border-gray-800">
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block">Strategy</span>
+          <span id="dl-card-strategy" class="text-xs font-mono text-indigo-400 mt-1 block">LEAST_COST</span>
+        </div>
+        <div class="glass-card p-3 rounded-lg border border-gray-800">
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block">Recovery Action</span>
+          <span id="dl-card-action" class="text-xs font-mono text-emerald-400 font-bold mt-1 block">RESOLVE_DEADLOCK</span>
+        </div>
+        <div class="glass-card p-3 rounded-lg border border-gray-800">
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block">Verification</span>
+          <span id="dl-card-verify" class="text-xs font-mono text-gray-300 mt-1 block truncate">Pending</span>
+        </div>
+        <div class="glass-card p-3 rounded-lg border border-gray-800">
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider font-semibold block">Final Result</span>
+          <span id="dl-card-result" class="text-xs mt-1 block"><span class="badge badge-success">HEALTHY</span></span>
+        </div>
+      </div>
+
+      <!-- Interactive WFG Canvas -->
+      <div class="glass-card p-6 rounded-xl flex flex-col items-center justify-center min-h-[300px]" id="deadlock-graph-container">
+        <svg id="wfg-svg" class="w-full h-64" viewBox="0 0 600 240"></svg>
+      </div>
+    </section>
+
+    <!-- TAB 6: WORKLOADS -->
+    <section id="panel-workloads" class="tab-panel hidden space-y-4">
+      <div>
+        <h2 class="font-bold text-base">Fault-Injection Workload Controllers</h2>
+        <p class="text-xs text-gray-400">Trigger authentic compiled C++ failure scenarios to verify automated detection & recovery</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="workload-cards">
+        <!-- Generated dynamically -->
+      </div>
+    </section>
+
+    <!-- TAB 7: POLICIES -->
+    <section id="panel-policies" class="tab-panel hidden space-y-4">
+      <h2 class="font-bold text-base">Automated Remediation Policies</h2>
+      <div class="glass-card rounded-xl overflow-hidden border border-gray-800">
+        <table class="w-full text-left text-xs text-gray-300">
+          <thead class="bg-gray-900/80 text-gray-400 uppercase font-semibold border-b border-gray-800">
+            <tr>
+              <th class="p-3">Incident Type</th>
+              <th class="p-3">Severity</th>
+              <th class="p-3">Action</th>
+              <th class="p-3">Threshold</th>
+              <th class="p-3">Persistence Window</th>
+              <th class="p-3">Max Attempts</th>
+              <th class="p-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="policies-table-body" class="divide-y divide-gray-800/60">
+            <tr><td colspan="7" class="p-4 text-center text-gray-500">Loading policies...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="glass-card border-t border-gray-800/80 px-6 py-3 text-center text-xs text-gray-500 mt-auto">
+    Orion Platform &bull; Core Principle: Observe &rarr; Detect &rarr; Decide &rarr; Act &rarr; Verify &rarr; Recover &rarr; Log
+  </footer>
+
+  <script>
+    let globalProcesses = [];
+    let historyBars = [];
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('border-indigo-500', 'text-indigo-400');
+        b.classList.add('border-transparent', 'text-gray-400');
+      });
+      document.getElementById('panel-' + tabId).classList.remove('hidden');
+      const activeBtn = document.getElementById('tab-' + tabId);
+      activeBtn.classList.remove('border-transparent', 'text-gray-400');
+      activeBtn.classList.add('border-indigo-500', 'text-indigo-400');
+    }
+
+    async function fetchSystemHealth() {
+      try {
+        const res = await fetch('/api/system/health');
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('stat-health').innerText = data.health || 'HEALTHY';
+        document.getElementById('stat-health').className = 'text-xl font-bold mt-1 ' + 
+          (data.health === 'HEALTHY' ? 'text-emerald-400' : (data.health === 'DEGRADED' ? 'text-amber-400' : 'text-rose-400'));
+        document.getElementById('stat-cpu').innerText = (data.cpu_usage_percent || 0).toFixed(1) + '%';
+        document.getElementById('stat-mem').innerText = (data.memory_usage_percent || 0).toFixed(1) + '%';
+        document.getElementById('stat-procs').innerText = data.active_processes || 0;
+        document.getElementById('stat-incidents').innerText = data.active_incidents || 0;
+        document.getElementById('stat-recovery').innerText = (data.recovery_success_rate || 100.0).toFixed(1) + '%';
+
+        // Add history bar
+        historyBars.push({ cpu: data.cpu_usage_percent || 0, mem: data.memory_usage_percent || 0 });
+        if (historyBars.length > 40) historyBars.shift();
+        renderChart();
+      } catch (err) {
+        document.getElementById('daemon-status').innerText = 'Backend Offline';
+      }
+    }
+
+    function renderChart() {
+      const container = document.getElementById('chart-bars');
+      container.innerHTML = historyBars.map(h => {
+        const cpuH = Math.min(100, Math.max(4, h.cpu));
+        const memH = Math.min(100, Math.max(4, h.mem));
+        return `<div class="flex-1 flex items-end justify-center space-x-0.5 h-full group relative">
+          <div style="height: ${cpuH}%" class="w-1/2 bg-indigo-500/80 rounded-t-sm hover:bg-indigo-400 transition-all" title="CPU: ${h.cpu.toFixed(1)}%"></div>
+          <div style="height: ${memH}%" class="w-1/2 bg-sky-500/80 rounded-t-sm hover:bg-sky-400 transition-all" title="Memory: ${h.mem.toFixed(1)}%"></div>
+        </div>`;
+      }).join('');
+    }
+
+    async function fetchProcesses() {
+      try {
+        const res = await fetch('/api/processes');
+        if (!res.ok) return;
+        globalProcesses = await res.json();
+        renderProcesses();
+      } catch (e) {}
+    }
+
+    function renderProcesses() {
+      const tbody = document.getElementById('processes-table-body');
+      const query = (document.getElementById('proc-search')?.value || '').toLowerCase();
+      const filtered = globalProcesses.filter(p => 
+        (p.name || '').toLowerCase().includes(query) || String(p.pid).includes(query)
+      );
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">No matching processes.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.slice(0, 30).map(p => `
+        <tr class="hover:bg-gray-800/40 transition">
+          <td class="p-3 font-mono text-gray-400">${p.pid}</td>
+          <td class="p-3 font-medium text-gray-200">${p.name}</td>
+          <td class="p-3 text-gray-400">${p.user_owner || 'system'}</td>
+          <td class="p-3"><span class="badge ${p.state === 'R' ? 'badge-success' : 'badge-low'}">${p.state}</span></td>
+          <td class="p-3 font-mono ${p.cpu_percent > 50 ? 'text-rose-400 font-bold' : ''}">${(p.cpu_percent || 0).toFixed(1)}%</td>
+          <td class="p-3 font-mono">${(p.memory_rss_mb || 0).toFixed(1)} MB</td>
+          <td class="p-3 font-mono text-gray-400">${p.thread_count || 1}</td>
+          <td class="p-3 text-right space-x-1.5">
+            <button onclick="dispatchAction(${p.pid}, 'CHANGE_PRIORITY')" class="px-2 py-1 text-[10px] bg-indigo-900/60 text-indigo-300 rounded hover:bg-indigo-800 transition">Nice +10</button>
+            <button onclick="dispatchAction(${p.pid}, 'TERMINATE_SIGTERM')" class="px-2 py-1 text-[10px] bg-amber-900/60 text-amber-300 rounded hover:bg-amber-800 transition">SIGTERM</button>
+            <button onclick="dispatchAction(${p.pid}, 'TERMINATE_SIGKILL')" class="px-2 py-1 text-[10px] bg-rose-900/60 text-rose-300 rounded hover:bg-rose-800 transition">SIGKILL</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function dispatchAction(pid, action) {
+      if (!confirm(`Confirm OS operation: ${action} on PID ${pid}?`)) return;
+      try {
+        const res = await fetch(`/api/processes/${pid}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: action })
+        });
+        const data = await res.json();
+        alert(data.message || `Action ${action} dispatched.`);
+        fetchProcesses();
+      } catch (err) {
+        alert('Action dispatch error: ' + err.message);
+      }
+    }
+
+    function getStatusClass(st) {
+      if (st === 'RESOLVED') return 'badge-success';
+      if (st === 'ESCALATED') return 'badge-escalated';
+      if (st === 'FAILED') return 'badge-critical';
+      if (st === 'RECOVERING' || st === 'INVESTIGATING') return 'badge-medium';
+      return 'badge-high';
+    }
+
+    async function fetchIncidents() {
+      try {
+        const res = await fetch('/api/incidents');
+        if (!res.ok) return;
+        const list = await res.json();
+        
+        // Table
+        const tbody = document.getElementById('incidents-table-body');
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-500">No incidents recorded.</td></tr>';
+        } else {
+          tbody.innerHTML = list.map(i => {
+            const incId = i.incident_id || i.id || 1;
+            const isResolved = (i.status === 'RESOLVED');
+            return `
+              <tr class="hover:bg-gray-800/40">
+                <td class="p-3 font-mono text-gray-400">#${incId}</td>
+                <td class="p-3 font-medium text-gray-200">PID ${i.pid || i.process_id || 'N/A'} (${i.process_name || 'workload'})</td>
+                <td class="p-3"><span class="badge ${i.severity === 'CRITICAL' ? 'badge-critical' : 'badge-high'}">${i.incident_type}</span></td>
+                <td class="p-3"><span class="badge badge-medium">${i.severity}</span></td>
+                <td class="p-3"><span class="badge ${getStatusClass(i.status)}">${i.status}</span></td>
+                <td class="p-3 text-gray-400">${new Date(i.detected_at).toLocaleTimeString()}</td>
+                <td class="p-3 text-right">
+                  ${!isResolved ? `
+                    <div class="flex items-center justify-end space-x-1.5">
+                      <button onclick="recoverIncident(${incId})" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded text-[11px] font-semibold transition shadow-sm" title="Execute matching remediation policy">Remediate</button>
+                      <button onclick="resolveIncident(${incId})" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded text-[11px] font-semibold transition shadow-sm" title="Mark as resolved">Resolve</button>
+                    </div>
+                  ` : `<span class="text-xs text-emerald-400 font-medium flex items-center justify-end gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Resolved</span>`}
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        // Dashboard Preview
+        const preview = document.getElementById('dashboard-incidents-list');
+        if (list.length === 0) {
+          preview.innerHTML = '<p class="text-gray-500 italic">No active incidents detected.</p>';
+        } else {
+          preview.innerHTML = list.slice(0, 5).map(i => {
+            const incId = i.incident_id || i.id || 1;
+            const isResolved = (i.status === 'RESOLVED');
+            return `
+              <div class="flex items-center justify-between p-2 rounded bg-gray-900/60 border border-gray-800">
+                <span class="font-medium text-gray-300">${i.incident_type} (PID ${i.pid || i.process_id || 'N/A'})</span>
+                <div class="flex items-center space-x-2">
+                  <span class="badge ${getStatusClass(i.status)}">${i.status}</span>
+                  ${!isResolved ? `<button onclick="resolveIncident(${incId})" class="text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white px-1.5 py-0.5 rounded font-medium transition">Resolve</button>` : ''}
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      } catch (e) {}
+    }
+
+    async function fetchRecovery() {
+      try {
+        const res = await fetch('/api/recovery');
+        if (!res.ok) return;
+        const list = await res.json();
+        
+        const tbody = document.getElementById('recovery-table-body');
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No recovery operations recorded.</td></tr>';
+        } else {
+          tbody.innerHTML = list.map(r => `
+            <tr class="hover:bg-gray-800/40">
+              <td class="p-3 font-mono text-gray-400">#${r.recovery_id || r.id || 1}</td>
+              <td class="p-3 font-mono text-gray-400">#${r.incident_id}</td>
+              <td class="p-3 font-semibold text-indigo-400">${r.action}</td>
+              <td class="p-3 font-mono text-gray-400">${r.attempt_number || 1}</td>
+              <td class="p-3 text-gray-300">${r.verification_result || 'Verified via /proc'}</td>
+              <td class="p-3"><span class="badge ${r.success ? 'badge-success' : 'badge-critical'}">${r.success ? 'SUCCESS' : 'FAILED'}</span></td>
+            </tr>
+          `).join('');
+        }
+
+        const preview = document.getElementById('dashboard-recovery-list');
+        if (list.length === 0) {
+          preview.innerHTML = '<p class="text-gray-500 italic">No automated recoveries logged yet.</p>';
+        } else {
+          preview.innerHTML = list.slice(0, 5).map(r => `
+            <div class="flex items-center justify-between p-2 rounded bg-gray-900/60 border border-gray-800">
+              <span class="font-medium text-gray-300">${r.action} &bull; ${r.result || (r.success ? 'VERIFIED_SUCCESS' : 'FAILED')}</span>
+              <span class="badge ${r.success ? 'badge-success' : 'badge-critical'}">${r.success ? 'VERIFIED' : 'FAILED'}</span>
+            </div>
+          `).join('');
+        }
+      } catch (e) {}
+    }
+
+    async function fetchPolicies() {
+      try {
+        const res = await fetch('/api/policies');
+        if (!res.ok) return;
+        const list = await res.json();
+        const tbody = document.getElementById('policies-table-body');
+        tbody.innerHTML = list.map(p => `
+          <tr class="hover:bg-gray-800/40">
+            <td class="p-3 font-semibold text-gray-200">${p.incident_type}</td>
+            <td class="p-3"><span class="badge badge-medium">${p.severity || 'HIGH'}</span></td>
+            <td class="p-3 font-mono text-indigo-400">${p.action}</td>
+            <td class="p-3 font-mono">${p.cpu_threshold ? p.cpu_threshold + '%' : (p.memory_threshold ? p.memory_threshold + '%' : '-')}</td>
+            <td class="p-3 font-mono">${p.persistence_count || 3} samples</td>
+            <td class="p-3 font-mono">${p.max_attempts || 3}</td>
+            <td class="p-3"><span class="badge ${p.enabled ? 'badge-success' : 'badge-low'}">${p.enabled ? 'ACTIVE' : 'DISABLED'}</span></td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function fetchDeadlocks() {
+      try {
+        const res = await fetch('/api/deadlocks');
+        if (!res.ok) return;
+        const d = await res.json();
+        const svg = document.getElementById('wfg-svg');
+        const statusText = document.getElementById('deadlock-status-text');
+
+        // Safe cycle formatting
+        let cycleStr = 'None';
+        if (d.cycle && Array.isArray(d.cycle) && d.cycle.length > 0) {
+          cycleStr = d.cycle.map(t => 'Thread ' + t).join(' &rarr; ');
+        } else if (d.cycles && Array.isArray(d.cycles) && d.cycles.length > 0) {
+          cycleStr = d.cycles.map(c => Array.isArray(c) ? c.map(t => 'Thread ' + t).join(' &rarr; ') : c).join(' | ');
+        }
+
+        // Update 6-metric cards
+        const cardCycle = document.getElementById('dl-card-cycle');
+        const cardVictim = document.getElementById('dl-card-victim');
+        const cardStrat = document.getElementById('dl-card-strategy');
+        const cardAct = document.getElementById('dl-card-action');
+        const cardVer = document.getElementById('dl-card-verify');
+        const cardRes = document.getElementById('dl-card-result');
+
+        if (cardCycle) cardCycle.innerHTML = d.has_deadlock ? `<span class="text-rose-400 font-bold">${cycleStr}</span>` : 'None (Acyclic)';
+        if (cardVictim) cardVictim.innerHTML = (d.has_deadlock && d.victim_thread) ? `<span class="text-rose-400 font-bold">Thread ${d.victim_thread}</span>` : 'None';
+        if (cardStrat) cardStrat.innerText = d.strategy || 'LEAST_COST';
+        if (cardAct) cardAct.innerText = d.action || 'RESOLVE_DEADLOCK';
+        if (cardVer) cardVer.innerText = d.verification || (d.has_deadlock ? 'Cycle Active' : 'Verified Acyclic');
+        if (cardRes) {
+          const badgeClass = d.has_deadlock ? 'badge-critical' : 'badge-success';
+          const badgeText = d.final_result || (d.has_deadlock ? 'CRITICAL' : 'HEALTHY');
+          cardRes.innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
+        }
+
+        if (d.has_deadlock) {
+          statusText.innerHTML = `
+            <div class="p-3 rounded-lg bg-rose-950/60 border border-rose-800 text-xs text-rose-200 flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                <span class="font-bold text-rose-300">DEADLOCK DETECTED!</span>
+                <span>Circular hold-and-wait dependency active (Cycle: <code class="font-mono text-rose-200">${cycleStr}</code>)</span>
+              </div>
+              <span class="badge badge-critical">CRITICAL</span>
+            </div>`;
+
+          const isVictim1 = (d.victim_thread === 1);
+          const isVictim2 = (d.victim_thread === 2);
+
+          svg.innerHTML = `
+            <defs>
+              <marker id="arrow-rose" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#f43f5e" />
+              </marker>
+              <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
+              </marker>
+            </defs>
+
+            <!-- Resource A (Mutex_A) -->
+            <rect x="235" y="15" width="130" height="42" rx="8" fill="#0f172a" stroke="#6366f1" stroke-width="2" />
+            <text x="300" y="34" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="bold" font-family="monospace">Resource: Mutex_A</text>
+            <text x="300" y="48" text-anchor="middle" fill="#64748b" font-size="9">Locked Mutex</text>
+
+            <!-- Resource B (Mutex_B) -->
+            <rect x="235" y="180" width="130" height="42" rx="8" fill="#0f172a" stroke="#6366f1" stroke-width="2" />
+            <text x="300" y="200" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="bold" font-family="monospace">Resource: Mutex_B</text>
+            <text x="300" y="214" text-anchor="middle" fill="#64748b" font-size="9">Locked Mutex</text>
+
+            <!-- Thread 1 Node -->
+            <circle cx="120" cy="120" r="38" fill="${isVictim1 ? '#4c0519' : '#1e1b4b'}" stroke="${isVictim1 ? '#f43f5e' : '#818cf8'}" stroke-width="${isVictim1 ? 3.5 : 2.5}" />
+            <text x="120" y="117" text-anchor="middle" fill="#ffffff" font-weight="bold" font-size="13">Thread 1</text>
+            <text x="120" y="132" text-anchor="middle" fill="${isVictim1 ? '#fda4af' : '#94a3b8'}" font-size="9" font-family="monospace">${isVictim1 ? 'VICTIM' : 'T1 (TID 1)'}</text>
+
+            <!-- Thread 2 Node -->
+            <circle cx="480" cy="120" r="38" fill="${isVictim2 ? '#4c0519' : '#1e1b4b'}" stroke="${isVictim2 ? '#f43f5e' : '#818cf8'}" stroke-width="${isVictim2 ? 3.5 : 2.5}" />
+            <text x="480" y="117" text-anchor="middle" fill="#ffffff" font-weight="bold" font-size="13">Thread 2</text>
+            <text x="480" y="132" text-anchor="middle" fill="${isVictim2 ? '#fda4af' : '#94a3b8'}" font-size="9" font-family="monospace">${isVictim2 ? 'VICTIM' : 'T2 (TID 2)'}</text>
+
+            <!-- Directed Edge 1: Thread 1 holds Mutex A -->
+            <path d="M 148 95 Q 185 36 235 36" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+            <text x="175" y="55" fill="#38bdf8" font-size="9" font-weight="bold">holds</text>
+
+            <!-- Directed Edge 2: Thread 2 waits for Mutex A -->
+            <path d="M 452 95 Q 415 36 365 36" fill="none" stroke="#f43f5e" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-rose)" />
+            <text x="415" y="55" fill="#f43f5e" font-size="9" font-weight="bold">waits for</text>
+
+            <!-- Directed Edge 3: Thread 2 holds Mutex B -->
+            <path d="M 452 145 Q 415 201 365 201" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-cyan)" />
+            <text x="415" y="185" fill="#38bdf8" font-size="9" font-weight="bold">holds</text>
+
+            <!-- Directed Edge 4: Thread 1 waits for Mutex B -->
+            <path d="M 148 145 Q 185 201 235 201" fill="none" stroke="#f43f5e" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-rose)" />
+            <text x="175" y="185" fill="#f43f5e" font-size="9" font-weight="bold">waits for</text>
+
+            <!-- Direct Cycle Arcs (Thread 1 <-> Thread 2) -->
+            <path d="M 158 110 C 240 80, 360 80, 442 110" fill="none" stroke="#f43f5e" stroke-width="2.5" marker-end="url(#arrow-rose)" />
+            <path d="M 442 130 C 360 160, 240 160, 158 130" fill="none" stroke="#f43f5e" stroke-width="2.5" marker-end="url(#arrow-rose)" />
+            <rect x="250" y="108" width="100" height="22" rx="4" fill="#881337" stroke="#f43f5e" stroke-width="1" />
+            <text x="300" y="123" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">CYCLE DETECTED</text>
+          `;
+        } else {
+          statusText.innerHTML = `
+            <div class="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800 text-xs text-emerald-300 flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span class="font-bold text-emerald-300">WAIT-FOR GRAPH ACYCLIC:</span>
+                <span>Zero circular mutex dependencies detected. Systems operating normally.</span>
+              </div>
+              <span class="badge badge-success">HEALTHY</span>
+            </div>`;
+
+          svg.innerHTML = `
+            <!-- Clean Acyclic Graph -->
+            <circle cx="180" cy="120" r="36" fill="#064e3b" stroke="#10b981" stroke-width="2" />
+            <text x="180" y="117" text-anchor="middle" fill="#ffffff" font-weight="bold" font-size="12">Thread 1</text>
+            <text x="180" y="132" text-anchor="middle" fill="#6ee7b7" font-size="9">Working</text>
+
+            <circle cx="420" cy="120" r="36" fill="#064e3b" stroke="#10b981" stroke-width="2" />
+            <text x="420" y="117" text-anchor="middle" fill="#ffffff" font-weight="bold" font-size="12">Thread 2</text>
+            <text x="420" y="132" text-anchor="middle" fill="#6ee7b7" font-size="9">Working</text>
+
+            <rect x="250" y="102" width="100" height="36" rx="8" fill="#022c22" stroke="#059669" stroke-width="1.5" />
+            <text x="300" y="118" text-anchor="middle" fill="#34d399" font-size="10" font-weight="bold">NO CYCLES</text>
+            <text x="300" y="130" text-anchor="middle" fill="#a7f3d0" font-size="8">Graph Acyclic</text>
+          `;
+        }
+      } catch (e) {
+        console.error('Error fetching deadlocks:', e);
+      }
+    }
+
+    async function resolveDeadlocks() {
+      try {
+        const res = await fetch('/api/deadlocks/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ strategy: 'LEAST_COST' })
+        });
+        const data = await res.json();
+        alert(data.message || 'Cycle resolution completed.');
+        loop();
+      } catch (err) {
+        alert('Resolution request error: ' + err.message);
+      }
+    }
+
+    const WORKLOADS_META = [
+      { id: 'cpu_hog', name: 'CPU Hog', desc: 'Spins active multi-core compute loop (>95% CPU)' },
+      { id: 'memory_hog', name: 'Memory Hog', desc: 'Rapidly allocates & touches 50MB memory blocks' },
+      { id: 'crash_test', name: 'Crash Test', desc: 'Triggers SIGSEGV null-pointer dereference' },
+      { id: 'crash_loop', name: 'Crash Loop Flapper', desc: 'Rapidly exits with error to trip circuit breaker' },
+      { id: 'hang_test', name: 'Hang Test', desc: 'Traps SIGTERM & blocks indefinitely in D-state' },
+      { id: 'deadlock_test', name: 'Deadlock Mutex Test', desc: 'Spawns inverted pthread mutex acquisition' },
+      { id: 'thread_hog', name: 'Thread Hog', desc: 'Spawns 120 spinning pthreads' },
+      { id: 'io_hog', name: 'I/O Thrash Hog', desc: 'Flushes continuous unbuffered fsync() writes' },
+      { id: 'fd_hog', name: 'FD Leak Hog', desc: 'Opens 300 persistent unclosed file descriptors' }
+    ];
+
+    function renderWorkloadCards() {
+      const container = document.getElementById('workload-cards');
+      container.innerHTML = WORKLOADS_META.map(w => `
+        <div class="glass-card p-4 rounded-xl flex flex-col justify-between space-y-3">
+          <div>
+            <h3 class="font-bold text-sm text-gray-200">${w.name}</h3>
+            <p class="text-xs text-gray-400 mt-1">${w.desc}</p>
+          </div>
+          <div class="flex items-center space-x-1.5 pt-2 border-t border-gray-800">
+            <button onclick="launchWorkload('${w.id}')" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-1.5 px-2 rounded-lg transition shadow-md shadow-indigo-600/30" title="Launch compiled C++ failure workload">
+              Launch
+            </button>
+            <button onclick="remediateWorkload('${w.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-1.5 px-2 rounded-lg transition shadow-md shadow-emerald-600/30" title="Execute automated OS policy remediation & verify">
+              Recover
+            </button>
+            <button onclick="stopWorkload('${w.id}')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs py-1.5 px-2.5 rounded-lg transition">
+              Stop
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function launchWorkload(name) {
+      try {
+        const res = await fetch(`/api/workloads/${name}/start`, { method: 'POST' });
+        const d = await res.json();
+        alert(d.message || `Workload ${name} launched.`);
+        loop();
+      } catch (e) {
+        alert('Launch error: ' + e.message);
+      }
+    }
+
+    async function stopWorkload(name) {
+      try {
+        const res = await fetch(`/api/workloads/${name}/stop`, { method: 'POST' });
+        const d = await res.json();
+        alert(d.message || `Workload ${name} stopped.`);
+        loop();
+      } catch (e) {
+        alert('Stop error: ' + e.message);
+      }
+    }
+
+    async function remediateWorkload(name) {
+      try {
+        const res = await fetch(`/api/workloads/${name}/recover`, { method: 'POST' });
+        const d = await res.json();
+        alert(d.message || `Automated recovery executed for ${name}.`);
+        loop();
+      } catch (e) {
+        alert('Recovery error: ' + e.message);
+      }
+    }
+
+    async function resolveIncident(id) {
+      try {
+        const res = await fetch(`/api/incidents/${id}/resolve`, { method: 'POST' });
+        const d = await res.json();
+        alert(d.message || `Incident #${id} resolved.`);
+        loop();
+      } catch (e) {
+        alert('Resolution error: ' + e.message);
+      }
+    }
+
+    async function recoverIncident(id) {
+      try {
+        const res = await fetch(`/api/incidents/${id}/recover`, { method: 'POST' });
+        const d = await res.json();
+        alert(d.details || `Policy dispatched and verified for incident #${id}.`);
+        loop();
+      } catch (e) {
+        alert('Remediation error: ' + e.message);
+      }
+    }
+
+    async function resolveAllIncidents() {
+      if (!confirm('Mark all active incidents as verified & resolved?')) return;
+      try {
+        const res = await fetch('/api/incidents/resolve-all', { method: 'POST' });
+        const d = await res.json();
+        alert(d.message || 'All incidents resolved.');
+        loop();
+      } catch (e) {
+        alert('Batch resolution error: ' + e.message);
+      }
+    }
+
+    // Polling loop
+    function loop() {
+      fetchSystemHealth();
+      fetchProcesses();
+      fetchIncidents();
+      fetchRecovery();
+      fetchDeadlocks();
+    }
+
+    renderWorkloadCards();
+    fetchPolicies();
+    loop();
+    setInterval(loop, 2000);
+  </script>
+</body>
+</html>
